@@ -17,7 +17,7 @@ jobs:
       TX_TOKEN: ${{ secrets.TX_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Setup build environment
         run: |
           sudo apt update && sudo apt install -y qttools5-dev-tools qt5-default transifex-client
@@ -48,7 +48,7 @@ jobs:
         arch: [armv7, arm64_v8a, x86, x86_64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Setup signing key
         env:
@@ -128,7 +128,7 @@ jobs:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Vars
         id: vars
@@ -162,7 +162,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Vars
         id: vars
         run: |
@@ -193,7 +193,7 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Vars
         id: vars
         run: |

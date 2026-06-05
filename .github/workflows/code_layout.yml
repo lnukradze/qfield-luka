@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Install Requirements
         run: |
           sudo apt install -y \
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Install Requirements
         run: |
             sudo apt install -y \
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Run Banned Keywords Test
         run: ./scripts/test_banned_keywords.sh
 
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Indentation Test
         run: ./scripts/spell_check/spell_test.sh
 
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-18.04 # cppcheck 1.8 shows some errors 1.9 does not show
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Install Requirements
         run: |
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Install Requirements
         run: |
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         
       - name: Check sdk pattern
         run: |
