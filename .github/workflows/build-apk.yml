@@ -35,14 +35,14 @@ jobs:
           bash /usr/src/qfield/scripts/docker-build.sh
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: QField-LukaNukradze-x86_64.apk
           path: build-x86_64/android-build/build/outputs/apk/**/*.apk
           if-no-files-found: warn
 
       - name: Upload build logs on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: build-logs
