@@ -262,7 +262,7 @@ Item {
 
           Label {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr( "დააჭირეთ „შემოწმება"" )
+            text: qsTr( "დააჭირეთ შემოწმება ღილაკს" )
             font.pixelSize: 14
             color: "#9E9E9E"
           }
