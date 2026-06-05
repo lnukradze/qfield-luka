@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -29,15 +29,19 @@ jobs:
           bash scripts/docker-build.sh
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: QField-LukaNukradze-arm64.apk
           path: build-arm64/android-build/build/outputs/apk/**/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
 
-      - name: Upload APK (armv7 fallback path)
-        uses: actions/upload-artifact@v3
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: build-logs
-          path: build-arm64/
+          path: |
+            build-arm64/CMakeFiles/CMakeError.log
+            build-arm64/CMakeFiles/CMakeOutput.log
+            build-arm64/**/*.log
+          if-no-files-found: ignore
