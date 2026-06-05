@@ -107,13 +107,13 @@ void TopologyCheckerModel::checkInvalidGeometries( QgsVectorLayer *layer )
     QgsGeometry geom = feature.geometry();
     if ( geom.isNull() || !geom.isGeosValid() )
     {
-      QStringList errors;
-      geom.validateGeometry( errors );
+      QVector<QgsGeometry::Error> geoErrors;
+      geom.validateGeometry( geoErrors );
       TopologyError err;
       err.errorType  = tr( "Invalid geometry" );
       err.featureInfo = tr( "Feature ID: %1 — %2" )
                           .arg( feature.id() )
-                          .arg( errors.isEmpty() ? tr( "unknown reason" ) : errors.first() );
+                          .arg( geoErrors.isEmpty() ? tr( "unknown reason" ) : geoErrors.first().what() );
       err.featureId   = feature.id();
       err.hasGeometry = true;
       mErrors.append( err );
@@ -132,7 +132,7 @@ void TopologyCheckerModel::checkDuplicates( QgsVectorLayer *layer )
   {
     if ( !feature.hasGeometry() )
       continue;
-    index.insertFeature( feature );
+    index.addFeature( feature );
     geometries.insert( feature.id(), feature.geometry() );
   }
 
@@ -175,7 +175,7 @@ void TopologyCheckerModel::checkOverlaps( QgsVectorLayer *layer )
   {
     if ( !feature.hasGeometry() )
       continue;
-    index.insertFeature( feature );
+    index.addFeature( feature );
     geometries.insert( feature.id(), feature.geometry() );
   }
 
