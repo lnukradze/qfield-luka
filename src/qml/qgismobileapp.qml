@@ -725,6 +725,23 @@ ApplicationWindow {
     }
   }
 
+  // Topology checker button — top-right, below search
+  QfToolButton {
+    id: topologyCheckerButton
+    round: true
+    anchors.right: parent.right
+    anchors.top: locatorItem.bottom
+    anchors.rightMargin: 4
+    anchors.topMargin: 4
+    visible: stateMachine.state !== "measure"
+    iconSource: Theme.getThemeIcon( "ic_check_white_24dp" )
+    bgcolor: topologyCheckerDialog.isOpen ? Theme.mainColor : Theme.darkGray
+
+    onClicked: {
+      topologyCheckerDialog.isOpen = !topologyCheckerDialog.isOpen
+    }
+  }
+
   LocatorSettings {
       id: locatorSettings
       locatorModelSuperBridge: locatorItem.locatorModelSuperBridge
@@ -873,21 +890,6 @@ ApplicationWindow {
       }
     }
 
-    QfToolButton {
-      id: topologyCheckerButton
-      round: true
-      visible: stateMachine.state === "digitize"
-          && dashBoard.currentLayer
-          && dashBoard.currentLayer.isValid
-          && ( dashBoard.currentLayer.geometryType() === QgsWkbTypes.PolygonGeometry || dashBoard.currentLayer.geometryType() === QgsWkbTypes.LineGeometry )
-      iconSource: Theme.getThemeIcon( "ic_check_white_24dp" )
-      bgcolor: Theme.darkGray
-
-      onClicked: {
-        topologyCheckerDialog.layerToCheck = dashBoard.currentLayer
-        topologyCheckerDialog.visible = true
-      }
-    }
 
     QfToolButton {
       id: freehandButton
@@ -1942,18 +1944,15 @@ ApplicationWindow {
   TopologyCheckerDialog {
     id: topologyCheckerDialog
     anchors.fill: parent
-    focus: visible
-
-    visible: false
+    mapSettingsRef: mapCanvas.mapSettings
+    isOpen: false
 
     Keys.onReleased: {
-      if (event.key === Qt.Key_Back || event.key === Qt.Key_Escape) {
+      if ( event.key === Qt.Key_Back || event.key === Qt.Key_Escape ) {
         event.accepted = true
-        visible = false
+        isOpen = false
       }
     }
-
-    Component.onCompleted: focusstack.addFocusTaker( this )
   }
 
   About {

@@ -4,13 +4,14 @@
 #include <QAbstractListModel>
 #include <QVector>
 #include <qgsvectorlayer.h>
+#include <qgsgeometry.h>
+#include <qgsrectangle.h>
 
 struct TopologyError
 {
-  QString errorType;
-  QString featureInfo;
-  QgsFeatureId featureId;
-  bool hasGeometry = true;
+  QString displayText;
+  double bboxXMin = 0, bboxYMin = 0, bboxXMax = 0, bboxYMax = 0;
+  bool hasGeometry = false;
 };
 
 class TopologyCheckerModel : public QAbstractListModel
@@ -21,14 +22,17 @@ class TopologyCheckerModel : public QAbstractListModel
     Q_PROPERTY( bool checked READ checked NOTIFY checkedChanged )
     Q_PROPERTY( bool hasErrors READ hasErrors NOTIFY hasErrorsChanged )
     Q_PROPERTY( QString statusText READ statusText NOTIFY statusTextChanged )
+    Q_PROPERTY( QObject *mapSettings WRITE setMapSettings )
 
   public:
     enum Roles
     {
-      ErrorTypeRole = Qt::UserRole + 1,
-      FeatureInfoRole,
-      FeatureIdRole,
+      DisplayTextRole = Qt::UserRole + 1,
       HasGeometryRole,
+      BboxXMinRole,
+      BboxYMinRole,
+      BboxXMaxRole,
+      BboxYMaxRole,
     };
     Q_ENUM( Roles )
 
@@ -43,8 +47,11 @@ class TopologyCheckerModel : public QAbstractListModel
     bool hasErrors() const { return !mErrors.isEmpty(); }
     QString statusText() const { return mStatusText; }
 
-    Q_INVOKABLE void runChecks( QgsVectorLayer *layer );
+    void setMapSettings( QObject *mapSettings ) { mMapSettings = mapSettings; }
+
+    Q_INVOKABLE void runChecks( double xMin, double yMin, double xMax, double yMax );
     Q_INVOKABLE void clearResults();
+    Q_INVOKABLE void zoomToError( int index );
 
   signals:
     void countChanged();
@@ -53,14 +60,19 @@ class TopologyCheckerModel : public QAbstractListModel
     void statusTextChanged();
 
   private:
-    void checkOverlaps( QgsVectorLayer *layer );
-    void checkDuplicates( QgsVectorLayer *layer );
-    void checkGaps( QgsVectorLayer *layer );
-    void checkInvalidGeometries( QgsVectorLayer *layer );
+    QgsVectorLayer *findLayer( const QString &nameHint ) const;
+    void addError( const QString &text, const QgsRectangle &bbox );
+    void checkOverlapsSelf( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
+    void checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorLayer *layerB,
+                            const QString &nameA, const QString &nameB, const QgsRectangle &extent );
+    void checkDuplicates( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
+    void checkGaps( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
+    void checkInvalidGeometries( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
 
     QVector<TopologyError> mErrors;
     bool mChecked = false;
     QString mStatusText;
+    QObject *mMapSettings = nullptr;
 };
 
 #endif // TOPOLOGYCHECKERMODEL_H
