@@ -25,11 +25,11 @@ jobs:
 
       - name: Build APK
         env:
-          APK_VERSION_CODE: "10906000"
+          APK_VERSION_CODE: "10906030"
           APP_VERSION_STR: "v1.9.6-LukaNukradze"
           APP_VERSION: "v1.9.6"
-          ARCH: arm64_v8a
-          BUILD_FOLDER: build-arm64
+          ARCH: x86_64
+          BUILD_FOLDER: build-x86_64
         run: |
           chmod +x /usr/src/qfield/scripts/docker-build.sh
           bash /usr/src/qfield/scripts/docker-build.sh
@@ -37,8 +37,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: QField-LukaNukradze-arm64.apk
-          path: build-arm64/android-build/build/outputs/apk/**/*.apk
+          name: QField-LukaNukradze-x86_64.apk
+          path: build-x86_64/android-build/build/outputs/apk/**/*.apk
           if-no-files-found: warn
 
       - name: Upload build logs on failure
@@ -47,7 +47,7 @@ jobs:
         with:
           name: build-logs
           path: |
-            build-arm64/CMakeFiles/CMakeError.log
-            build-arm64/CMakeFiles/CMakeOutput.log
-            build-arm64/**/*.log
+            build-x86_64/CMakeFiles/CMakeError.log
+            build-x86_64/CMakeFiles/CMakeOutput.log
+            build-x86_64/**/*.log
           if-no-files-found: ignore
