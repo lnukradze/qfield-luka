@@ -115,7 +115,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
 
       - name: Upload release assets
-        uses: AButler/upload-release-assets@v2.0
+        uses: AButler/upload-release-assets@v4.0
         if: ${{ github.event_name == 'release' }}
         with:
           files: /tmp/qfield-*.apk
