@@ -1,0 +1,16 @@
+[main]
+host = https://www.transifex.com
+lang_map = zh-Hant: zh_TW
+
+[qfield-for-qgis.qfield]
+file_filter = i18n/qfield_<lang>.ts
+source_file = i18n/qfield_en.ts
+source_lang = en
+type = QT
+
+[qfield-for-qgis.qfield_android]
+file_filter = android/res/values-<lang>/strings.xml
+source_file = android/res/values/strings.xml
+source_lang = en
+type = ANDROID
+
