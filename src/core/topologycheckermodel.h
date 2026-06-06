@@ -50,6 +50,7 @@ class TopologyCheckerModel : public QAbstractListModel
     void setMapSettings( QObject *mapSettings ) { mMapSettings = mapSettings; }
 
     Q_INVOKABLE void runChecks( double xMin, double yMin, double xMax, double yMax );
+    Q_INVOKABLE void runChecksForCurrentExtent();
     Q_INVOKABLE void clearResults();
     Q_INVOKABLE void zoomToError( int index );
 

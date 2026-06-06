@@ -30,6 +30,19 @@ static QgsRectangle toMapExtent( const QgsRectangle &bbox, QgsVectorLayer *layer
   return ct.transformBoundingBox( bbox );
 }
 
+static int countFeaturesInExtent( QgsVectorLayer *layer, const QgsRectangle &mapExtent )
+{
+  if ( !layer ) return -1;
+  QgsFeatureRequest req;
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
+  req.setFlags( QgsFeatureRequest::NoGeometry );
+  int n = 0;
+  QgsFeatureIterator it = layer->getFeatures( req );
+  QgsFeature f;
+  while ( it.nextFeature( f ) ) ++n;
+  return n;
+}
+
 TopologyCheckerModel::TopologyCheckerModel( QObject *parent )
   : QAbstractListModel( parent )
 {
@@ -158,9 +171,15 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
 
   mChecked = true;
   int n = mErrors.count();
+
+  QStringList counts;
+  if ( nakvetiLayer ) counts << tr( "ნაკვეთი: %1" ).arg( countFeaturesInExtent( nakvetiLayer, extent ) );
+  if ( shenobaLayer ) counts << tr( "შენობა: %1" ).arg( countFeaturesInExtent( shenobaLayer, extent ) );
+  QString countInfo = counts.join( QStringLiteral( ", " ) );
+
   mStatusText = n == 0
-    ? tr( "ხარვეზი არ აღმოჩენილა" )
-    : tr( "%1 ხარვეზი აღმოჩენილა" ).arg( n );
+    ? tr( "%1 — ხარვეზი არ აღმოჩენილა" ).arg( countInfo )
+    : tr( "%1 — %2 ხარვეზი აღმოჩენილა" ).arg( countInfo ).arg( n );
 
   // Reset model so ListView sees the new rows
   beginResetModel();
@@ -169,6 +188,33 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
   emit checkedChanged();
   emit hasErrorsChanged();
   emit statusTextChanged();
+}
+
+void TopologyCheckerModel::runChecksForCurrentExtent()
+{
+  QgsRectangle extent;
+  if ( mMapSettings )
+  {
+    QVariant v = mMapSettings->property( "extent" );
+    if ( v.canConvert<QgsRectangle>() )
+      extent = v.value<QgsRectangle>();
+  }
+
+  if ( extent.isEmpty() || extent.isNull() )
+  {
+    beginResetModel();
+    mErrors.clear();
+    mChecked    = true;
+    mStatusText = tr( "ვერ მოიძებნა რუქის არე (extent)" );
+    endResetModel();
+    emit statusTextChanged();
+    emit countChanged();
+    emit checkedChanged();
+    emit hasErrorsChanged();
+    return;
+  }
+
+  runChecks( extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum() );
 }
 
 void TopologyCheckerModel::clearResults()

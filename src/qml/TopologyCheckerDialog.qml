@@ -124,13 +124,7 @@ Item {
             id: checkBtnArea
             anchors.fill: parent
             onClicked: {
-              if ( root.mapSettingsRef ) {
-                var ext = root.mapSettingsRef.extent
-                topologyModel.runChecks(
-                  ext.xMinimum, ext.yMinimum,
-                  ext.xMaximum, ext.yMaximum
-                )
-              }
+              topologyModel.runChecksForCurrentExtent()
             }
           }
         }
