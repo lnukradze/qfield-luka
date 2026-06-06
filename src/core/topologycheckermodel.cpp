@@ -8,41 +8,6 @@
 #include <qgsspatialindex.h>
 #include <qgsvectorlayer.h>
 
-// Transform map-canvas extent → layer native CRS
-static QgsRectangle toLayerExtent( const QgsRectangle &mapExtent, QgsVectorLayer *layer )
-{
-  if ( !layer ) return mapExtent;
-  QgsCoordinateReferenceSystem mapCrs = QgsProject::instance()->crs();
-  if ( !mapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mapCrs )
-    return mapExtent;
-  QgsCoordinateTransform ct( mapCrs, layer->crs(), QgsProject::instance() );
-  return ct.transformBoundingBox( mapExtent );
-}
-
-// Transform layer-CRS bbox → map CRS for zoom
-static QgsRectangle toMapExtent( const QgsRectangle &bbox, QgsVectorLayer *layer )
-{
-  if ( !layer ) return bbox;
-  QgsCoordinateReferenceSystem mapCrs = QgsProject::instance()->crs();
-  if ( !mapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mapCrs )
-    return bbox;
-  QgsCoordinateTransform ct( layer->crs(), mapCrs, QgsProject::instance() );
-  return ct.transformBoundingBox( bbox );
-}
-
-static int countFeaturesInExtent( QgsVectorLayer *layer, const QgsRectangle &mapExtent )
-{
-  if ( !layer ) return -1;
-  QgsFeatureRequest req;
-  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
-  req.setFlags( QgsFeatureRequest::NoGeometry );
-  int n = 0;
-  QgsFeatureIterator it = layer->getFeatures( req );
-  QgsFeature f;
-  while ( it.nextFeature( f ) ) ++n;
-  return n;
-}
-
 TopologyCheckerModel::TopologyCheckerModel( QObject *parent )
   : QAbstractListModel( parent )
 {
@@ -97,6 +62,37 @@ QgsVectorLayer *TopologyCheckerModel::findLayer( const QString &nameHint ) const
   return nullptr;
 }
 
+QgsRectangle TopologyCheckerModel::toLayerExtent( const QgsRectangle &mapExtent, QgsVectorLayer *layer ) const
+{
+  if ( !layer ) return mapExtent;
+  if ( !mMapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mMapCrs )
+    return mapExtent;
+  QgsCoordinateTransform ct( mMapCrs, layer->crs(), QgsProject::instance() );
+  return ct.transformBoundingBox( mapExtent );
+}
+
+QgsRectangle TopologyCheckerModel::toMapExtent( const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer ) const
+{
+  if ( !layer ) return bboxInLayerCrs;
+  if ( !mMapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mMapCrs )
+    return bboxInLayerCrs;
+  QgsCoordinateTransform ct( layer->crs(), mMapCrs, QgsProject::instance() );
+  return ct.transformBoundingBox( bboxInLayerCrs );
+}
+
+int TopologyCheckerModel::countFeaturesInExtent( QgsVectorLayer *layer, const QgsRectangle &mapExtent ) const
+{
+  if ( !layer ) return -1;
+  QgsFeatureRequest req;
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
+  req.setFlags( QgsFeatureRequest::NoGeometry );
+  int n = 0;
+  QgsFeatureIterator it = layer->getFeatures( req );
+  QgsFeature f;
+  while ( it.nextFeature( f ) ) ++n;
+  return n;
+}
+
 void TopologyCheckerModel::addError( const QString &text, const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer )
 {
   QgsRectangle bbox = toMapExtent( bboxInLayerCrs, layer );
@@ -112,6 +108,9 @@ void TopologyCheckerModel::addError( const QString &text, const QgsRectangle &bb
 
 void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, double yMax )
 {
+  if ( !mMapCrs.isValid() )
+    mMapCrs = QgsProject::instance()->crs();
+
   beginResetModel();
   mErrors.clear();
   mChecked    = false;
@@ -173,13 +172,16 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
   int n = mErrors.count();
 
   QStringList counts;
-  if ( nakvetiLayer ) counts << tr( "ნაკვეთი: %1" ).arg( countFeaturesInExtent( nakvetiLayer, extent ) );
-  if ( shenobaLayer ) counts << tr( "შენობა: %1" ).arg( countFeaturesInExtent( shenobaLayer, extent ) );
-  QString countInfo = counts.join( QStringLiteral( ", " ) );
+  counts << tr( "რუქა: %1" ).arg( mMapCrs.authid() );
+  if ( nakvetiLayer )
+    counts << tr( "ნაკვეთი(%1): %2" ).arg( nakvetiLayer->crs().authid() ).arg( countFeaturesInExtent( nakvetiLayer, extent ) );
+  if ( shenobaLayer )
+    counts << tr( "შენობა(%1): %2" ).arg( shenobaLayer->crs().authid() ).arg( countFeaturesInExtent( shenobaLayer, extent ) );
+  QString countInfo = counts.join( QStringLiteral( " | " ) );
 
   mStatusText = n == 0
-    ? tr( "%1 — ხარვეზი არ აღმოჩენილა" ).arg( countInfo )
-    : tr( "%1 — %2 ხარვეზი აღმოჩენილა" ).arg( countInfo ).arg( n );
+    ? tr( "%1\nხარვეზი არ აღმოჩენილა" ).arg( countInfo )
+    : tr( "%1\n%2 ხარვეზი აღმოჩენილა" ).arg( countInfo ).arg( n );
 
   // Reset model so ListView sees the new rows
   beginResetModel();
@@ -193,12 +195,21 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
 void TopologyCheckerModel::runChecksForCurrentExtent()
 {
   QgsRectangle extent;
+  mMapCrs = QgsCoordinateReferenceSystem();
+
   if ( mMapSettings )
   {
-    QVariant v = mMapSettings->property( "extent" );
-    if ( v.canConvert<QgsRectangle>() )
-      extent = v.value<QgsRectangle>();
+    QVariant ev = mMapSettings->property( "extent" );
+    if ( ev.canConvert<QgsRectangle>() )
+      extent = ev.value<QgsRectangle>();
+
+    QVariant cv = mMapSettings->property( "destinationCrs" );
+    if ( cv.canConvert<QgsCoordinateReferenceSystem>() )
+      mMapCrs = cv.value<QgsCoordinateReferenceSystem>();
   }
+
+  if ( !mMapCrs.isValid() )
+    mMapCrs = QgsProject::instance()->crs();
 
   if ( extent.isEmpty() || extent.isNull() )
   {

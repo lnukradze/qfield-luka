@@ -6,6 +6,7 @@
 #include <qgsvectorlayer.h>
 #include <qgsgeometry.h>
 #include <qgsrectangle.h>
+#include <qgscoordinatereferencesystem.h>
 
 struct TopologyError
 {
@@ -62,6 +63,9 @@ class TopologyCheckerModel : public QAbstractListModel
 
   private:
     QgsVectorLayer *findLayer( const QString &nameHint ) const;
+    QgsRectangle toLayerExtent( const QgsRectangle &mapExtent, QgsVectorLayer *layer ) const;
+    QgsRectangle toMapExtent( const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer ) const;
+    int countFeaturesInExtent( QgsVectorLayer *layer, const QgsRectangle &mapExtent ) const;
     void addError( const QString &text, const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer );
     void checkOverlapsSelf( QgsVectorLayer *layer, const QString &name, const QgsRectangle &mapExtent );
     void checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorLayer *layerB,
@@ -74,6 +78,7 @@ class TopologyCheckerModel : public QAbstractListModel
     bool mChecked = false;
     QString mStatusText;
     QObject *mMapSettings = nullptr;
+    QgsCoordinateReferenceSystem mMapCrs;
 };
 
 #endif // TOPOLOGYCHECKERMODEL_H
