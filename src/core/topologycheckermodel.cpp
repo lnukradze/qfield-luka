@@ -1,11 +1,34 @@
 #include "topologycheckermodel.h"
 
+#include <qgscoordinatetransform.h>
 #include <qgsfeatureiterator.h>
 #include <qgsfeaturerequest.h>
 #include <qgsgeometry.h>
 #include <qgsproject.h>
 #include <qgsspatialindex.h>
 #include <qgsvectorlayer.h>
+
+// Transform map-canvas extent → layer native CRS
+static QgsRectangle toLayerExtent( const QgsRectangle &mapExtent, QgsVectorLayer *layer )
+{
+  if ( !layer ) return mapExtent;
+  QgsCoordinateReferenceSystem mapCrs = QgsProject::instance()->crs();
+  if ( !mapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mapCrs )
+    return mapExtent;
+  QgsCoordinateTransform ct( mapCrs, layer->crs(), QgsProject::instance() );
+  return ct.transformBoundingBox( mapExtent );
+}
+
+// Transform layer-CRS bbox → map CRS for zoom
+static QgsRectangle toMapExtent( const QgsRectangle &bbox, QgsVectorLayer *layer )
+{
+  if ( !layer ) return bbox;
+  QgsCoordinateReferenceSystem mapCrs = QgsProject::instance()->crs();
+  if ( !mapCrs.isValid() || !layer->crs().isValid() || layer->crs() == mapCrs )
+    return bbox;
+  QgsCoordinateTransform ct( layer->crs(), mapCrs, QgsProject::instance() );
+  return ct.transformBoundingBox( bbox );
+}
 
 TopologyCheckerModel::TopologyCheckerModel( QObject *parent )
   : QAbstractListModel( parent )
@@ -61,8 +84,9 @@ QgsVectorLayer *TopologyCheckerModel::findLayer( const QString &nameHint ) const
   return nullptr;
 }
 
-void TopologyCheckerModel::addError( const QString &text, const QgsRectangle &bbox )
+void TopologyCheckerModel::addError( const QString &text, const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer )
 {
+  QgsRectangle bbox = toMapExtent( bboxInLayerCrs, layer );
   TopologyError err;
   err.displayText = text;
   err.bboxXMin    = bbox.xMinimum();
@@ -77,18 +101,39 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
 {
   beginResetModel();
   mErrors.clear();
-  mChecked  = false;
+  mChecked    = false;
   mStatusText = tr( "შემოწმება მიმდინარეობს…" );
-  emit statusTextChanged();
   endResetModel();
+  emit statusTextChanged();
+  emit countChanged();
+  emit checkedChanged();
+  emit hasErrorsChanged();
 
   QgsRectangle extent( xMin, yMin, xMax, yMax );
 
   QgsVectorLayer *nakvetiLayer = findLayer( QStringLiteral( "ნაკვეთ" ) );
   if ( !nakvetiLayer )
     nakvetiLayer = findLayer( QStringLiteral( "საკვეთ" ) );
-
   QgsVectorLayer *shenobaLayer = findLayer( QStringLiteral( "შენობ" ) );
+
+  // Diagnostic: if nothing found, list all vector layer names
+  if ( !nakvetiLayer && !shenobaLayer )
+  {
+    QStringList names;
+    const QMap<QString, QgsMapLayer *> all = QgsProject::instance()->mapLayers();
+    for ( QgsMapLayer *ml : all )
+    {
+      QgsVectorLayer *vl = qobject_cast<QgsVectorLayer *>( ml );
+      if ( vl && vl->isValid() ) names << vl->name();
+    }
+    mChecked = true;
+    mStatusText = names.isEmpty()
+      ? tr( "პროექტი გახსნილი არ არის" )
+      : tr( "ფენები: " ) + names.join( "; " );
+    emit statusTextChanged();
+    emit checkedChanged();
+    return;
+  }
 
   if ( nakvetiLayer )
   {
@@ -117,6 +162,9 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
     ? tr( "ხარვეზი არ აღმოჩენილა" )
     : tr( "%1 ხარვეზი აღმოჩენილა" ).arg( n );
 
+  // Reset model so ListView sees the new rows
+  beginResetModel();
+  endResetModel();
   emit countChanged();
   emit checkedChanged();
   emit hasErrorsChanged();
@@ -150,10 +198,10 @@ void TopologyCheckerModel::zoomToError( int index )
 }
 
 void TopologyCheckerModel::checkInvalidGeometries( QgsVectorLayer *layer, const QString &name,
-                                                    const QgsRectangle &extent )
+                                                    const QgsRectangle &mapExtent )
 {
   QgsFeatureRequest req;
-  req.setFilterRect( extent );
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
   QgsFeatureIterator it = layer->getFeatures( req );
   QgsFeature feature;
   while ( it.nextFeature( feature ) )
@@ -163,18 +211,18 @@ void TopologyCheckerModel::checkInvalidGeometries( QgsVectorLayer *layer, const 
     if ( geom.isNull() || !geom.isGeosValid() )
     {
       addError( name + QStringLiteral( " | არავალიდური გეომეტრია" ),
-                geom.boundingBox() );
+                geom.boundingBox(), layer );
     }
   }
 }
 
 void TopologyCheckerModel::checkDuplicates( QgsVectorLayer *layer, const QString &name,
-                                             const QgsRectangle &extent )
+                                             const QgsRectangle &mapExtent )
 {
   QgsSpatialIndex index;
   QHash<QgsFeatureId, QgsGeometry> geoms;
   QgsFeatureRequest req;
-  req.setFilterRect( extent );
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
   QgsFeatureIterator it = layer->getFeatures( req );
   QgsFeature feature;
   while ( it.nextFeature( feature ) )
@@ -195,7 +243,7 @@ void TopologyCheckerModel::checkDuplicates( QgsVectorLayer *layer, const QString
       if ( geoms[idA].equals( geoms[idB] ) )
       {
         addError( name + QStringLiteral( " | დუბლიკატი" ),
-                  geoms[idA].boundingBox() );
+                  geoms[idA].boundingBox(), layer );
         reported.insert( idA );
         reported.insert( idB );
       }
@@ -204,12 +252,12 @@ void TopologyCheckerModel::checkDuplicates( QgsVectorLayer *layer, const QString
 }
 
 void TopologyCheckerModel::checkOverlapsSelf( QgsVectorLayer *layer, const QString &name,
-                                               const QgsRectangle &extent )
+                                               const QgsRectangle &mapExtent )
 {
   QgsSpatialIndex index;
   QHash<QgsFeatureId, QgsGeometry> geoms;
   QgsFeatureRequest req;
-  req.setFilterRect( extent );
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
   QgsFeatureIterator it = layer->getFeatures( req );
   QgsFeature feature;
   while ( it.nextFeature( feature ) )
@@ -229,12 +277,12 @@ void TopologyCheckerModel::checkOverlapsSelf( QgsVectorLayer *layer, const QStri
       auto pair = qMakePair( idA, idB );
       if ( reported.contains( pair ) ) continue;
       QgsGeometry intersection = geoms[idA].intersection( geoms[idB] );
-      if ( !intersection.isNull() && !intersection.isEmpty()
-           && intersection.type() == QgsWkbTypes::PolygonGeometry )
+      // Use area() > 0 — robust against MultiPolygon / GeometryCollection
+      if ( !intersection.isNull() && intersection.area() > 1e-10 )
       {
         QString label = name + QStringLiteral( " | გადაფარვა " )
                         + name.toLower() + QStringLiteral( "ებს შორის" );
-        addError( label, intersection.boundingBox() );
+        addError( label, intersection.boundingBox(), layer );
         reported.insert( pair );
       }
     }
@@ -243,12 +291,13 @@ void TopologyCheckerModel::checkOverlapsSelf( QgsVectorLayer *layer, const QStri
 
 void TopologyCheckerModel::checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorLayer *layerB,
                                                const QString &nameA, const QString &nameB,
-                                               const QgsRectangle &extent )
+                                               const QgsRectangle &mapExtent )
 {
+  // Build spatial index for layerB
   QgsSpatialIndex indexB;
   QHash<QgsFeatureId, QgsGeometry> geomsB;
   QgsFeatureRequest reqB;
-  reqB.setFilterRect( extent );
+  reqB.setFilterRect( toLayerExtent( mapExtent, layerB ) );
   QgsFeatureIterator itB = layerB->getFeatures( reqB );
   QgsFeature fB;
   while ( itB.nextFeature( fB ) )
@@ -259,7 +308,7 @@ void TopologyCheckerModel::checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorL
   }
 
   QgsFeatureRequest reqA;
-  reqA.setFilterRect( extent );
+  reqA.setFilterRect( toLayerExtent( mapExtent, layerA ) );
   QgsFeatureIterator itA = layerA->getFeatures( reqA );
   QgsFeature fA;
   while ( itA.nextFeature( fA ) )
@@ -268,11 +317,10 @@ void TopologyCheckerModel::checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorL
     for ( QgsFeatureId idB : indexB.intersects( fA.geometry().boundingBox() ) )
     {
       QgsGeometry intersection = fA.geometry().intersection( geomsB[idB] );
-      if ( !intersection.isNull() && !intersection.isEmpty()
-           && intersection.type() == QgsWkbTypes::PolygonGeometry )
+      if ( !intersection.isNull() && intersection.area() > 1e-10 )
       {
         addError( nameA + QStringLiteral( " | გადაფარვა " ) + nameB + QStringLiteral( "თან" ),
-                  intersection.boundingBox() );
+                  intersection.boundingBox(), layerA );
         break;
       }
     }
@@ -280,12 +328,12 @@ void TopologyCheckerModel::checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorL
 }
 
 void TopologyCheckerModel::checkGaps( QgsVectorLayer *layer, const QString &name,
-                                       const QgsRectangle &extent )
+                                       const QgsRectangle &mapExtent )
 {
   QgsGeometry combined;
   bool first = true;
   QgsFeatureRequest req;
-  req.setFilterRect( extent );
+  req.setFilterRect( toLayerExtent( mapExtent, layer ) );
   QgsFeatureIterator it = layer->getFeatures( req );
   QgsFeature feature;
   while ( it.nextFeature( feature ) )
@@ -298,9 +346,8 @@ void TopologyCheckerModel::checkGaps( QgsVectorLayer *layer, const QString &name
 
   QgsGeometry hull = combined.convexHull();
   QgsGeometry gaps = hull.difference( combined );
-  if ( !gaps.isNull() && !gaps.isEmpty()
-       && gaps.type() == QgsWkbTypes::PolygonGeometry )
+  if ( !gaps.isNull() && gaps.area() > 1e-10 )
   {
-    addError( name + QStringLiteral( " | ხარვეზი" ), gaps.boundingBox() );
+    addError( name + QStringLiteral( " | ხარვეზი" ), gaps.boundingBox(), layer );
   }
 }

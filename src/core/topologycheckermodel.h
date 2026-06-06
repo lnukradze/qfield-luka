@@ -61,13 +61,13 @@ class TopologyCheckerModel : public QAbstractListModel
 
   private:
     QgsVectorLayer *findLayer( const QString &nameHint ) const;
-    void addError( const QString &text, const QgsRectangle &bbox );
-    void checkOverlapsSelf( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
+    void addError( const QString &text, const QgsRectangle &bboxInLayerCrs, QgsVectorLayer *layer );
+    void checkOverlapsSelf( QgsVectorLayer *layer, const QString &name, const QgsRectangle &mapExtent );
     void checkOverlapsWith( QgsVectorLayer *layerA, QgsVectorLayer *layerB,
-                            const QString &nameA, const QString &nameB, const QgsRectangle &extent );
-    void checkDuplicates( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
-    void checkGaps( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
-    void checkInvalidGeometries( QgsVectorLayer *layer, const QString &name, const QgsRectangle &extent );
+                            const QString &nameA, const QString &nameB, const QgsRectangle &mapExtent );
+    void checkDuplicates( QgsVectorLayer *layer, const QString &name, const QgsRectangle &mapExtent );
+    void checkGaps( QgsVectorLayer *layer, const QString &name, const QgsRectangle &mapExtent );
+    void checkInvalidGeometries( QgsVectorLayer *layer, const QString &name, const QgsRectangle &mapExtent );
 
     QVector<TopologyError> mErrors;
     bool mChecked = false;
