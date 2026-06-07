@@ -37,7 +37,7 @@ Item {
     border.color: "#FF6600"
     border.width: 4
     radius: 4
-    z: 20
+    z: 5  // below the panel (z:10) so it never draws over it
     opacity: 0
 
     SequentialAnimation {

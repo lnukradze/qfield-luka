@@ -169,7 +169,8 @@ class TopologyCheckerModel : public QAbstractListModel
     {
       QgsVectorLayer *layer = nullptr;
       QgsSpatialIndex index;
-      QHash<QgsFeatureId, QgsGeometry> geoms; // in layer CRS
+      QHash<QgsFeatureId, QgsGeometry> geoms; // made valid, in layer CRS
+      QSet<QgsFeatureId> invalidIds;          // features whose original geometry was invalid
     };
 
     QgsVectorLayer *resolveLayer( const QString &name ) const;

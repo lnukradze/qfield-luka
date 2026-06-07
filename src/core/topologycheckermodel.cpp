@@ -333,8 +333,20 @@ TopologyCheckerModel::LayerCache *TopologyCheckerModel::layerCache( QgsVectorLay
   while ( it.nextFeature( f ) )
   {
     if ( !f.hasGeometry() ) continue;
+    QgsGeometry g = f.geometry();
+    const bool wasInvalid = g.isNull() || !g.isGeosValid();
+    if ( wasInvalid )
+    {
+      // Invalid WFS geometries break intersection()/unaryUnion(); repair a copy
+      // for all geometric ops but remember the feature for the "invalid" rule.
+      const QgsGeometry fixed = g.makeValid();
+      if ( !fixed.isNull() && !fixed.isEmpty() )
+        g = fixed;
+      lc->invalidIds.insert( f.id() );
+    }
+    f.setGeometry( g );
     lc->index.addFeature( f );
-    lc->geoms.insert( f.id(), f.geometry() );
+    lc->geoms.insert( f.id(), g );
   }
 
   mCaches.insert( id, lc );
@@ -362,11 +374,11 @@ void TopologyCheckerModel::addError( const QString &label, const QgsRectangle &b
 
 void TopologyCheckerModel::checkInvalidGeometries( LayerCache *lc, const QString &label )
 {
-  for ( auto it = lc->geoms.constBegin(); it != lc->geoms.constEnd(); ++it )
+  // invalidIds was populated from the *original* geometry while loading the cache.
+  for ( const QgsFeatureId id : qAsConst( lc->invalidIds ) )
   {
-    const QgsGeometry &geom = it.value();
-    if ( geom.isNull() || !geom.isGeosValid() )
-      addError( label, geom.boundingBox(), lc->layer );
+    const QgsGeometry geom = lc->geoms.value( id );
+    addError( label, geom.boundingBox(), lc->layer );
   }
 }
 
@@ -688,8 +700,10 @@ void TopologyCheckerModel::zoomToError( int index )
   }
   bbox.grow( size * 0.6 );
 
-  QMetaObject::invokeMethod( mMapSettings, "setExtent",
-    Qt::DirectConnection, Q_ARG( QgsRectangle, bbox ) );
+  // NOTE: setExtent() is the property WRITE accessor, NOT a Q_INVOKABLE/slot, so
+  // QMetaObject::invokeMethod( "setExtent" ) silently does nothing. Setting the
+  // "extent" property goes through the accessor and actually moves the canvas.
+  mMapSettings->setProperty( "extent", QVariant::fromValue( bbox ) );
 
   // Convert the *error* rectangle (not the padded view) to screen pixels so the
   // highlight sits exactly on the geometry regardless of aspect ratio.
