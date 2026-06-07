@@ -11,6 +11,8 @@
 struct TopologyError
 {
   QString displayText;
+  QString sectionText;
+  int displayIndex = 0;
   double bboxXMin = 0, bboxYMin = 0, bboxXMax = 0, bboxYMax = 0;
   bool hasGeometry = false;
 };
@@ -34,6 +36,8 @@ class TopologyCheckerModel : public QAbstractListModel
       BboxYMinRole,
       BboxXMaxRole,
       BboxYMaxRole,
+      SectionTextRole,
+      DisplayIndexRole,
     };
     Q_ENUM( Roles )
 
@@ -60,6 +64,7 @@ class TopologyCheckerModel : public QAbstractListModel
     void checkedChanged();
     void hasErrorsChanged();
     void statusTextChanged();
+    void highlightRequested( double xMin, double yMin, double xMax, double yMax );
 
   private:
     QgsVectorLayer *findLayer( const QString &nameHint ) const;

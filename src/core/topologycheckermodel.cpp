@@ -27,12 +27,14 @@ QVariant TopologyCheckerModel::data( const QModelIndex &index, int role ) const
   const TopologyError &err = mErrors.at( index.row() );
   switch ( role )
   {
-    case DisplayTextRole: return err.displayText;
-    case HasGeometryRole: return err.hasGeometry;
-    case BboxXMinRole:    return err.bboxXMin;
-    case BboxYMinRole:    return err.bboxYMin;
-    case BboxXMaxRole:    return err.bboxXMax;
-    case BboxYMaxRole:    return err.bboxYMax;
+    case DisplayTextRole:  return err.displayText;
+    case HasGeometryRole:  return err.hasGeometry;
+    case BboxXMinRole:     return err.bboxXMin;
+    case BboxYMinRole:     return err.bboxYMin;
+    case BboxXMaxRole:     return err.bboxXMax;
+    case BboxYMaxRole:     return err.bboxYMax;
+    case SectionTextRole:  return err.sectionText;
+    case DisplayIndexRole: return err.displayIndex;
   }
   return QVariant();
 }
@@ -40,12 +42,14 @@ QVariant TopologyCheckerModel::data( const QModelIndex &index, int role ) const
 QHash<int, QByteArray> TopologyCheckerModel::roleNames() const
 {
   QHash<int, QByteArray> roles;
-  roles[DisplayTextRole] = "displayText";
-  roles[HasGeometryRole] = "hasGeometry";
-  roles[BboxXMinRole]    = "bboxXMin";
-  roles[BboxYMinRole]    = "bboxYMin";
-  roles[BboxXMaxRole]    = "bboxXMax";
-  roles[BboxYMaxRole]    = "bboxYMax";
+  roles[DisplayTextRole]  = "displayText";
+  roles[HasGeometryRole]  = "hasGeometry";
+  roles[BboxXMinRole]     = "bboxXMin";
+  roles[BboxYMinRole]     = "bboxYMin";
+  roles[BboxXMaxRole]     = "bboxXMax";
+  roles[BboxYMaxRole]     = "bboxYMax";
+  roles[SectionTextRole]  = "sectionText";
+  roles[DisplayIndexRole] = "displayIndex";
   return roles;
 }
 
@@ -85,7 +89,6 @@ int TopologyCheckerModel::countFeaturesInExtent( QgsVectorLayer *layer, const Qg
   if ( !layer ) return -1;
   QgsFeatureRequest req;
   req.setFilterRect( toLayerExtent( mapExtent, layer ) );
-  req.setFlags( QgsFeatureRequest::NoGeometry );
   int n = 0;
   QgsFeatureIterator it = layer->getFeatures( req );
   QgsFeature f;
@@ -102,6 +105,7 @@ void TopologyCheckerModel::addError( const QString &text, const QgsRectangle &bb
   err.bboxYMin    = bbox.yMinimum();
   err.bboxXMax    = bbox.xMaximum();
   err.bboxYMax    = bbox.yMaximum();
+  err.sectionText = text;
   err.hasGeometry = !bbox.isNull();
   mErrors.append( err );
 }
@@ -170,6 +174,19 @@ void TopologyCheckerModel::runChecks( double xMin, double yMin, double xMax, dou
 
   mChecked = true;
   int n = mErrors.count();
+
+  // Count errors per category for section headers, then assign sectionText + displayIndex
+  {
+    QMap<QString, int> catCounts;
+    for ( const auto &e : qAsConst( mErrors ) ) catCounts[e.sectionText]++;
+    QMap<QString, int> catIdx;
+    for ( auto &e : mErrors )
+    {
+      QString key = e.sectionText;
+      e.sectionText = key + QStringLiteral( " (%1)" ).arg( catCounts[key] );
+      e.displayIndex = ++catIdx[e.sectionText];
+    }
+  }
 
   QStringList counts;
   counts << tr( "რუქა: %1" ).arg( mMapCrs.authid() );
@@ -252,6 +269,9 @@ void TopologyCheckerModel::zoomToError( int index )
   bbox.scale( 2.0 );
   QMetaObject::invokeMethod( mMapSettings, "setExtent",
     Qt::DirectConnection, Q_ARG( QgsRectangle, bbox ) );
+
+  // Signal QML to show a highlight at the error location (map coords)
+  emit highlightRequested( err.bboxXMin, err.bboxYMin, err.bboxXMax, err.bboxYMax );
 }
 
 void TopologyCheckerModel::checkInvalidGeometries( QgsVectorLayer *layer, const QString &name,
