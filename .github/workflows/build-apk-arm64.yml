@@ -1,0 +1,57 @@
+name: Build APK (arm64 tablet)
+
+# Builds an arm64-v8a APK for physical ARM tablets/phones
+# (e.g. Samsung Galaxy Tab Active Pro SM-T545).
+# The existing build-apk.yml keeps producing the x86_64 APK for the emulator.
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: opengisch/qfield-sdk:20210413
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Link source to expected path
+        run: |
+          rm -rf /usr/src/qfield
+          ln -s "$GITHUB_WORKSPACE" /usr/src/qfield
+          echo "Source linked: $(ls /usr/src/qfield | head -5)"
+
+      - name: Build APK
+        env:
+          APK_VERSION_CODE: "10906032"
+          APP_VERSION_STR: "v1.9.6-LukaNukradze"
+          APP_VERSION: "v1.9.6"
+          ARCH: arm64_v8a
+          BUILD_FOLDER: build-arm64_v8a
+        run: |
+          chmod +x /usr/src/qfield/scripts/docker-build.sh
+          bash /usr/src/qfield/scripts/docker-build.sh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: QField-LukaNukradze-arm64_v8a.apk
+          path: build-arm64_v8a/android-build/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs-arm64
+          path: |
+            build-arm64_v8a/CMakeFiles/CMakeError.log
+            build-arm64_v8a/CMakeFiles/CMakeOutput.log
+            build-arm64_v8a/**/*.log
+          if-no-files-found: ignore
