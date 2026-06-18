@@ -131,6 +131,7 @@
 #include "bluetoothdevicemodel.h"
 #include "gnsspositioninformation.h"
 #include "layerresolver.h"
+#include "shapedigitizingmodel.h"
 #include "topologycheckermodel.h"
 
 #define QUOTE(string) _QUOTE(string)
@@ -377,6 +378,7 @@ void QgisMobileapp::initDeclarative()
   qmlRegisterType<BluetoothReceiver>( "org.qfield", 1, 0, "BluetoothReceiver" );
   qmlRegisterType<LayerResolver>( "org.qfield", 1, 0, "LayerResolver" );
   qmlRegisterType<TopologyCheckerModel>( "org.qfield", 1, 0, "TopologyCheckerModel" );
+  qmlRegisterType<ShapeDigitizingModel>( "org.qfield", 1, 0, "ShapeDigitizingModel" );
 
   qRegisterMetaType<GnssPositionInformation>( "GnssPositionInformation" );
 

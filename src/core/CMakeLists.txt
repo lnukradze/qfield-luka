@@ -67,6 +67,7 @@ SET(QFIELD_CORE_SRCS
   utils/urlutils.cpp
   expressionevaluator.cpp
   topologycheckermodel.cpp
+  shapedigitizingmodel.cpp
   qgsquick/qgsquickcoordinatetransformer.cpp
   qgsquick/qgsquickfeaturelayerpair.cpp
   qgsquick/qgsquickmapcanvasmap.cpp
@@ -146,6 +147,7 @@ SET(QFIELD_CORE_HDRS
   utils/urlutils.h
   expressionevaluator.h
   topologycheckermodel.h
+  shapedigitizingmodel.h
   qgsquick/qgsquickcoordinatetransformer.h
   qgsquick/qgsquickfeaturelayerpair.h
   qgsquick/qgsquickmapcanvasmap.h

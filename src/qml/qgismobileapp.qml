@@ -890,6 +890,23 @@ ApplicationWindow {
       }
     }
 
+    // Shape digitizing toolbar (rectangle / circle / regular polygon)
+    QfToolButton {
+      id: shapeButton
+      round: true
+      visible: stateMachine.state === "digitize"
+          && dashBoard.currentLayer
+          && dashBoard.currentLayer.isValid
+          && dashBoard.currentLayer.geometryType() === QgsWkbTypes.PolygonGeometry
+      iconSource: Theme.getThemeIcon( "ic_add_white_24dp" )
+      bgcolor: shapeDigitizingDialog.isOpen ? Theme.mainColor : Theme.darkGray
+
+      onClicked: {
+        shapeDigitizingDialog.currentLayer = dashBoard.currentLayer
+        shapeDigitizingDialog.isOpen = !shapeDigitizingDialog.isOpen
+      }
+    }
+
 
     QfToolButton {
       id: freehandButton
@@ -1946,6 +1963,22 @@ ApplicationWindow {
     anchors.fill: parent
     mapSettingsRef: mapCanvas.mapSettings
     isOpen: false
+
+    Keys.onReleased: {
+      if ( event.key === Qt.Key_Back || event.key === Qt.Key_Escape ) {
+        event.accepted = true
+        isOpen = false
+      }
+    }
+  }
+
+  ShapeDigitizingDialog {
+    id: shapeDigitizingDialog
+    anchors.fill: parent
+    mapSettingsRef: mapCanvas.mapSettings
+    isOpen: false
+
+    onToast: displayToast( message )
 
     Keys.onReleased: {
       if ( event.key === Qt.Key_Back || event.key === Qt.Key_Escape ) {

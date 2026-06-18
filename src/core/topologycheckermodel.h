@@ -57,6 +57,7 @@ class TopologyRulesModel : public QAbstractListModel
       MustNotHaveMultiPart,
       MustNotOverlap,
       MustNotOverlapWith,
+      MustBeInsideOrDisjoint,
       RuleTypeCount
     };
     Q_ENUM( RuleType )
@@ -160,8 +161,9 @@ class TopologyCheckerModel : public QAbstractListModel
     void checkedChanged();
     void hasErrorsChanged();
     void statusTextChanged();
-    //! Emitted after zoomToError with the error rectangle already in screen pixels.
-    void highlightScreenRequested( double x, double y, double width, double height );
+    //! Emitted after zoomToError with the error's "imaginary point" already in
+    //! screen pixels — the UI blinks a marker there (no rectangle).
+    void highlightPointRequested( double x, double y );
 
   private:
     //! Per-layer cache of features (in layer CRS) built once per run.
@@ -189,6 +191,7 @@ class TopologyCheckerModel : public QAbstractListModel
     void checkOverlapsWith( LayerCache *lcA, LayerCache *lcB, const QString &label );
     void checkGaps( LayerCache *lc, const QString &label );
     void checkContains( LayerCache *lcA, LayerCache *lcB, const QString &label );
+    void checkInsideOrDisjoint( LayerCache *lcA, LayerCache *lcB, const QString &label );
 
     void runChecks( const QgsRectangle &mapExtent );
 

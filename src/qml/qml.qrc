@@ -2,6 +2,7 @@
     <qresource prefix="/qml">
         <file>About.qml</file>
         <file>TopologyCheckerDialog.qml</file>
+        <file>ShapeDigitizingDialog.qml</file>
         <file>BadLayerItem.qml</file>
         <file>CoordinateLocator.qml</file>
         <file>DashBoard.qml</file>

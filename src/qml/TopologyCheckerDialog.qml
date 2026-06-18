@@ -27,38 +27,65 @@ Item {
       refreshLayers()
   }
 
-  // ---- Highlight rectangle (drawn exactly on the error after zoom) ----
-  // zoomToError() converts the error bbox to screen pixels and emits
-  // highlightScreenRequested(x, y, width, height) in this item's coordinates.
-  Rectangle {
-    id: errorHighlight
+  // ---- Blinking point marker (drawn exactly on the error after zoom) ----
+  // zoomToError() centres the map on the error's "imaginary point" and emits
+  // highlightPointRequested(x, y) in this item's screen coordinates. We blink a
+  // dot with an expanding ring there — no rectangle (like the QGIS checker).
+  Item {
+    id: errorMarker
     visible: false
-    color: "transparent"
-    border.color: "#FF6600"
-    border.width: 4
-    radius: 4
     z: 5  // below the panel (z:10) so it never draws over it
-    opacity: 0
+    property real px: 0
+    property real py: 0
+
+    // Expanding pulse ring
+    Rectangle {
+      id: markerRing
+      width: 16; height: 16; radius: width / 2
+      x: errorMarker.px - width / 2
+      y: errorMarker.py - height / 2
+      color: "transparent"
+      border.color: "#FF1744"
+      border.width: 3
+      opacity: 0
+    }
+
+    // Solid centre dot
+    Rectangle {
+      id: markerDot
+      width: 18; height: 18; radius: 9
+      x: errorMarker.px - width / 2
+      y: errorMarker.py - height / 2
+      color: "#FF1744"
+      border.color: "white"
+      border.width: 2
+      opacity: 0
+    }
 
     SequentialAnimation {
-      id: highlightAnim
+      id: markerAnim
       loops: 3
-      NumberAnimation { target: errorHighlight; property: "opacity"; to: 1.0; duration: 220 }
-      NumberAnimation { target: errorHighlight; property: "opacity"; to: 0.15; duration: 320 }
-      onStopped: errorHighlight.visible = false
+      ParallelAnimation {
+        NumberAnimation { target: markerDot; property: "opacity"; from: 0.25; to: 1.0; duration: 250 }
+        NumberAnimation { target: markerRing; property: "width"; from: 16; to: 64; duration: 650 }
+        NumberAnimation { target: markerRing; property: "opacity"; from: 0.9; to: 0.0; duration: 650 }
+      }
+      NumberAnimation { target: markerDot; property: "opacity"; to: 0.3; duration: 200 }
+      onStopped: {
+        markerRing.width = 16
+        errorMarker.visible = false
+      }
     }
   }
 
   Connections {
     target: topologyModel
-    onHighlightScreenRequested: {
-      errorHighlight.x = x
-      errorHighlight.y = y
-      errorHighlight.width = Math.max( width, 14 )
-      errorHighlight.height = Math.max( height, 14 )
-      errorHighlight.opacity = 0
-      errorHighlight.visible = true
-      highlightAnim.restart()
+    onHighlightPointRequested: {
+      errorMarker.px = x
+      errorMarker.py = y
+      markerRing.width = 16
+      errorMarker.visible = true
+      markerAnim.restart()
     }
   }
 

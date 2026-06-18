@@ -76,6 +76,7 @@ QString TopologyRulesModel::ruleTypeName( int type )
     case MustNotHaveMultiPart:        return QStringLiteral( "must not have multi-part geometries" );
     case MustNotOverlap:              return QStringLiteral( "must not overlap" );
     case MustNotOverlapWith:          return QStringLiteral( "must not overlap with" );
+    case MustBeInsideOrDisjoint:      return QStringLiteral( "must be inside or disjoint" );
   }
   return QString();
 }
@@ -90,7 +91,7 @@ QStringList TopologyRulesModel::ruleTypeNames() const
 
 bool TopologyRulesModel::ruleTypeNeedsLayer2( int type ) const
 {
-  return type == MustNotOverlapWith || type == MustContain;
+  return type == MustNotOverlapWith || type == MustContain || type == MustBeInsideOrDisjoint;
 }
 
 void TopologyRulesModel::addRule( int type, const QString &layer1, const QString &layer2 )
@@ -152,7 +153,9 @@ void TopologyRulesModel::loadDefaults()
   const QString shenoba = QStringLiteral( "შენობა" );
 
   mRules.append( { MustNotOverlap,               nakveti, QString(), true } );
-  mRules.append( { MustNotOverlapWith,           nakveti, shenoba,   true } );
+  // A building must be fully inside a single parcel or not touch any parcel at
+  // all (straddling a boundary / spanning two parcels is an error).
+  mRules.append( { MustBeInsideOrDisjoint,       shenoba, nakveti,   true } );
   mRules.append( { MustNotHaveDuplicates,        nakveti, QString(), true } );
   mRules.append( { MustNotHaveGaps,              nakveti, QString(), true } );
   mRules.append( { MustNotHaveInvalidGeometries, nakveti, QString(), true } );
@@ -510,6 +513,55 @@ void TopologyCheckerModel::checkContains( LayerCache *lcA, LayerCache *lcB, cons
   }
 }
 
+void TopologyCheckerModel::checkInsideOrDisjoint( LayerCache *lcA, LayerCache *lcB, const QString &label )
+{
+  // Each layer-1 feature (e.g. building) must be EITHER fully inside a single
+  // layer-2 feature (e.g. parcel) OR not touch any parcel at all. Straddling a
+  // boundary, or spanning two adjacent parcels, is a topology error. The error
+  // is reported at the part of the building that sticks outside the parcels —
+  // that becomes the "imaginary point" the UI zooms to and blinks.
+  for ( auto it = lcA->geoms.constBegin(); it != lcA->geoms.constEnd(); ++it )
+  {
+    const QgsGeometry &gA = it.value();
+    const QList<QgsFeatureId> cand = lcB->index.intersects( gA.boundingBox() );
+
+    bool touchesAny = false;
+    bool withinOne  = false;
+    QVector<QgsGeometry> overlappingParcels;
+
+    for ( QgsFeatureId idB : cand )
+    {
+      const QgsGeometry gB = geomToLayer( lcB->geoms[idB], lcB->layer, lcA->layer );
+      const QgsGeometry inter = gA.intersection( gB );
+      // A shared edge gives a 0-area intersection; ignore it (that is "disjoint").
+      if ( inter.isNull() || inter.area() <= AREA_TOLERANCE )
+        continue;
+
+      touchesAny = true;
+      overlappingParcels.append( gB );
+      if ( gB.contains( gA ) )
+      {
+        withinOne = true;
+        break;
+      }
+    }
+
+    if ( !touchesAny || withinOne )
+      continue; // OK: fully outside, or fully inside one parcel
+
+    // Violation: locate the part of the building outside the parcels it touches.
+    QgsGeometry problem = gA;
+    if ( !overlappingParcels.isEmpty() )
+    {
+      const QgsGeometry pUnion  = QgsGeometry::unaryUnion( overlappingParcels );
+      const QgsGeometry outside = gA.difference( pUnion );
+      if ( !outside.isNull() && outside.area() > AREA_TOLERANCE )
+        problem = outside;
+    }
+    addError( label, problem.boundingBox(), lcA->layer );
+  }
+}
+
 // ---------------------------------------------------------------------
 //  Orchestration
 // ---------------------------------------------------------------------
@@ -578,6 +630,9 @@ void TopologyCheckerModel::runChecks( const QgsRectangle &mapExtent )
         break;
       case TopologyRulesModel::MustContain:
         checkContains( lc1, lc2, tr( "%1 — არ შეიცავს %2-ს" ).arg( name1, name2 ) );
+        break;
+      case TopologyRulesModel::MustBeInsideOrDisjoint:
+        checkInsideOrDisjoint( lc1, lc2, tr( "%1 — სცდება %2-ს (არ არის სრულად შიგნით)" ).arg( name1, name2 ) );
         break;
     }
   }
@@ -683,48 +738,42 @@ void TopologyCheckerModel::zoomToError( int index )
     return;
 
   const TopologyError &err = mErrors.at( index );
-  QgsRectangle bbox( err.bboxXMin, err.bboxYMin, err.bboxXMax, err.bboxYMax );
-  if ( bbox.isNull() )
-    return;
+  const QgsRectangle errBox( err.bboxXMin, err.bboxYMin, err.bboxXMax, err.bboxYMax );
 
-  // Add margin so the error is centred with context; guarantee a usable size
-  // for point/zero-area errors by falling back to a fraction of the view.
-  double w = bbox.width();
-  double h = bbox.height();
-  double size = std::max( w, h );
-  if ( size <= 0.0 )
+  // "Imaginary point" at the error location: the centre of the error geometry's
+  // bbox (e.g. the middle of an overlap area). This is what we zoom to and blink.
+  const double cx = ( err.bboxXMin + err.bboxXMax ) / 2.0;
+  const double cy = ( err.bboxYMin + err.bboxYMax ) / 2.0;
+
+  // Zoom like the QGIS Topology Checker: centre the error and zoom in tightly so
+  // the spot is obvious. Half-extent scales with the error but has a floor so a
+  // point/tiny error is still framed with a few metres of context.
+  const double errSize = std::max( errBox.width(), errBox.height() );
+  double half;
+  if ( errSize > 0.0 )
+  {
+    half = std::max( errSize * 2.0, 5.0 );
+  }
+  else
   {
     const QVariant ev = mMapSettings->property( "extent" );
-    double cur = ev.canConvert<QgsRectangle>() ? ev.value<QgsRectangle>().width() : 0.0;
-    size = cur > 0.0 ? cur * 0.02 : 10.0;
+    const double cur = ev.canConvert<QgsRectangle>() ? ev.value<QgsRectangle>().width() : 0.0;
+    half = cur > 0.0 ? cur * 0.03 : 10.0;
   }
-  bbox.grow( size * 0.6 );
+
+  const QgsRectangle view( cx - half, cy - half, cx + half, cy + half );
 
   // NOTE: setExtent() is the property WRITE accessor, NOT a Q_INVOKABLE/slot, so
   // QMetaObject::invokeMethod( "setExtent" ) silently does nothing. Setting the
   // "extent" property goes through the accessor and actually moves the canvas.
-  mMapSettings->setProperty( "extent", QVariant::fromValue( bbox ) );
+  mMapSettings->setProperty( "extent", QVariant::fromValue( view ) );
 
-  // Convert the *error* rectangle (not the padded view) to screen pixels so the
-  // highlight sits exactly on the geometry regardless of aspect ratio.
-  QgsRectangle errBox( err.bboxXMin, err.bboxYMin, err.bboxXMax, err.bboxYMax );
-  if ( errBox.width() <= 0 || errBox.height() <= 0 )
-    errBox.grow( size * 0.05 );
+  // Convert the imaginary point to screen pixels for the blinking marker.
+  QPointF screenPt;
+  const bool ok = QMetaObject::invokeMethod( mMapSettings, "coordinateToScreen",
+    Qt::DirectConnection, Q_RETURN_ARG( QPointF, screenPt ),
+    Q_ARG( QgsPoint, QgsPoint( cx, cy ) ) );
 
-  QPointF topLeft, bottomRight;
-  bool okTL = QMetaObject::invokeMethod( mMapSettings, "coordinateToScreen",
-    Qt::DirectConnection, Q_RETURN_ARG( QPointF, topLeft ),
-    Q_ARG( QgsPoint, QgsPoint( errBox.xMinimum(), errBox.yMaximum() ) ) );
-  bool okBR = QMetaObject::invokeMethod( mMapSettings, "coordinateToScreen",
-    Qt::DirectConnection, Q_RETURN_ARG( QPointF, bottomRight ),
-    Q_ARG( QgsPoint, QgsPoint( errBox.xMaximum(), errBox.yMinimum() ) ) );
-
-  if ( okTL && okBR )
-  {
-    const double x = topLeft.x();
-    const double y = topLeft.y();
-    const double width = bottomRight.x() - topLeft.x();
-    const double height = bottomRight.y() - topLeft.y();
-    emit highlightScreenRequested( x, y, width, height );
-  }
+  if ( ok )
+    emit highlightPointRequested( screenPt.x(), screenPt.y() );
 }
