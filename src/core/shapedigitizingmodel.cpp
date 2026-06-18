@@ -41,6 +41,7 @@ void ShapeDigitizingModel::setMode( int mode )
     return;
   mMode = mode;
   mPoints.clear();
+  mHasProvisional = false;
   emit modeChanged();
   emit pointsChanged();
 }
@@ -119,12 +120,64 @@ QPointF ShapeDigitizingModel::toScreen( const QgsPointXY &p, bool *ok ) const
   return screen;
 }
 
+QgsPointXY ShapeDigitizingModel::fromScreen( double x, double y, bool *ok ) const
+{
+  QgsPoint result;
+  bool success = false;
+  if ( mMapSettings )
+    success = QMetaObject::invokeMethod( mMapSettings, "screenToCoordinate",
+      Qt::DirectConnection, Q_RETURN_ARG( QgsPoint, result ),
+      Q_ARG( QPointF, QPointF( x, y ) ) );
+  if ( ok )
+    *ok = success;
+  return QgsPointXY( result.x(), result.y() );
+}
+
+QgsPointXY ShapeDigitizingModel::provisionalPoint() const
+{
+  return mHasProvisional ? mProvisional : mapCenter();
+}
+
 void ShapeDigitizingModel::capturePoint()
 {
   if ( mPoints.count() >= requiredPoints() )
     return; // already have everything this shape needs
   refreshMapCrs();
   mPoints.append( mapCenter() );
+  mHasProvisional = false;
+  emit pointsChanged();
+}
+
+void ShapeDigitizingModel::capturePointAtScreen( double x, double y )
+{
+  if ( mPoints.count() >= requiredPoints() )
+    return;
+  refreshMapCrs();
+  bool ok = false;
+  const QgsPointXY p = fromScreen( x, y, &ok );
+  if ( !ok )
+    return;
+  mPoints.append( p );
+  mHasProvisional = false;
+  emit pointsChanged();
+}
+
+void ShapeDigitizingModel::setProvisionalScreenPoint( double x, double y )
+{
+  bool ok = false;
+  const QgsPointXY p = fromScreen( x, y, &ok );
+  if ( !ok )
+    return;
+  mProvisional = p;
+  mHasProvisional = true;
+  emit pointsChanged(); // refresh the live preview
+}
+
+void ShapeDigitizingModel::clearProvisional()
+{
+  if ( !mHasProvisional )
+    return;
+  mHasProvisional = false;
   emit pointsChanged();
 }
 
@@ -138,9 +191,10 @@ void ShapeDigitizingModel::undoPoint()
 
 void ShapeDigitizingModel::clear()
 {
-  if ( mPoints.isEmpty() )
+  if ( mPoints.isEmpty() && !mHasProvisional )
     return;
   mPoints.clear();
+  mHasProvisional = false;
   emit pointsChanged();
 }
 
@@ -222,10 +276,10 @@ QVariantList ShapeDigitizingModel::capturedPointsScreen() const
 
 QVariantList ShapeDigitizingModel::previewOutlineScreen() const
 {
-  // Captured points + the live crosshair as the provisional next point.
+  // Captured points + the live pen/crosshair position as the provisional point.
   QVector<QgsPointXY> pts = mPoints;
   if ( pts.count() < requiredPoints() )
-    pts.append( mapCenter() );
+    pts.append( provisionalPoint() );
 
   const QgsGeometry geom = buildGeometryMapCrs( pts );
   QVariantList out;

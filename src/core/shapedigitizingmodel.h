@@ -70,6 +70,11 @@ class ShapeDigitizingModel : public QObject
 
     //! Capture the current map-centre (crosshair) coordinate as the next point.
     Q_INVOKABLE void capturePoint();
+    //! Capture a point at an exact screen position (pen/finger tap on the map).
+    Q_INVOKABLE void capturePointAtScreen( double x, double y );
+    //! Track the live pen/finger position so the preview follows it (no commit).
+    Q_INVOKABLE void setProvisionalScreenPoint( double x, double y );
+    Q_INVOKABLE void clearProvisional();
     Q_INVOKABLE void undoPoint();
     Q_INVOKABLE void clear();
 
@@ -94,12 +99,16 @@ class ShapeDigitizingModel : public QObject
   private:
     void refreshMapCrs();
     QgsPointXY mapCenter() const;
+    QgsPointXY provisionalPoint() const;
     QgsGeometry buildGeometryMapCrs( const QVector<QgsPointXY> &pts ) const;
     QPointF toScreen( const QgsPointXY &mapPoint, bool *ok ) const;
+    QgsPointXY fromScreen( double x, double y, bool *ok ) const;
 
     int mMode = RectangleExtent;
     int mNumSides = 5;
     QVector<QgsPointXY> mPoints; // in map CRS
+    QgsPointXY mProvisional;     // live pen/finger position, in map CRS
+    bool mHasProvisional = false;
     QObject *mMapSettings = nullptr;
     QgsVectorLayer *mTargetLayer = nullptr;
     QgsCoordinateReferenceSystem mMapCrs;

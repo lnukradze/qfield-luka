@@ -153,14 +153,15 @@ Item {
             }
           }
 
-          // Close
+          // Close (clearly visible red button)
           Rectangle {
-            width: 36; height: 36; radius: 18
-            color: closeBtnArea.pressed ? Qt.rgba( 0, 0, 0, 0.28 ) : Qt.rgba( 0, 0, 0, 0.15 )
+            width: 40; height: 40; radius: 20
+            color: closeBtnArea.pressed ? "#B71C1C" : "#E53935"
+            border.color: "white"; border.width: 1
             Layout.alignment: Qt.AlignVCenter
             Label {
               anchors.centerIn: parent
-              text: "✕"; font.pixelSize: 16; font.bold: true; color: "white"
+              text: "✕"; font.pixelSize: 20; font.bold: true; color: "white"
             }
             MouseArea {
               id: closeBtnArea

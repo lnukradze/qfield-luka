@@ -8,10 +8,15 @@ import org.qfield 1.0
 /**
  * QGIS-style shape digitizing overlay for QField.
  *
- * The map stays pannable (only the bottom control card and its buttons grab
- * touches). The user lines up the fixed centre crosshair on each construction
- * point, taps "წერტილი", and a rectangle / circle / regular polygon is built
- * and added as a new feature to the current editable polygon layer.
+ * Two input modes (toggled in the header):
+ *  - Pen mode (default): tap the map directly with the pen/finger to place each
+ *    point exactly where you touch; the live preview follows the pen. Best for
+ *    small/precise objects. Map panning is paused while pen mode is on.
+ *  - Centre mode: the map stays pannable; line up the fixed centre crosshair and
+ *    tap "წერტილი" to capture the map centre.
+ *
+ * The captured points build a rectangle / circle / regular polygon, which is
+ * added as a new feature to the current editable polygon layer.
  */
 Item {
   id: root
@@ -19,6 +24,9 @@ Item {
   property var mapSettingsRef: null
   property var currentLayer: null
   property bool isOpen: false
+  // Pen mode: tap directly on the map (pen/finger) to place each point exactly
+  // where you touch. Off = use the fixed centre crosshair + "წერტილი" button.
+  property bool penMode: true
 
   signal toast( string message )
 
@@ -92,12 +100,40 @@ Item {
     onRotationChanged: previewCanvas.requestPaint()
   }
 
-  // ---- Fixed centre crosshair (the capture point) ----
+  // ---- Pen / finger tap-to-place surface (active in pen mode) ----
+  // Tapping places a point exactly where you touch; moving updates the live
+  // preview so the shape follows the pen. Panning is paused while pen mode is on.
+  MouseArea {
+    id: penSurface
+    anchors.fill: parent
+    enabled: root.isOpen && root.penMode
+    visible: enabled
+    hoverEnabled: true
+    z: 5  // above the preview canvas (4), below the control card (10)
+    onPositionChanged: shapeModel.setProvisionalScreenPoint( mouse.x, mouse.y )
+    onPressed: shapeModel.setProvisionalScreenPoint( mouse.x, mouse.y )
+    onClicked: shapeModel.capturePointAtScreen( mouse.x, mouse.y )
+    onExited: shapeModel.clearProvisional()
+  }
+
+  // Cursor that follows the pen/finger in pen mode
+  Rectangle {
+    visible: root.isOpen && root.penMode && penSurface.containsMouse
+    x: penSurface.mouseX - 12
+    y: penSurface.mouseY - 12
+    width: 24; height: 24; radius: 12
+    color: "transparent"
+    border.color: "#FF1744"; border.width: 2
+    z: 7
+    Rectangle { anchors.centerIn: parent; width: 4; height: 4; radius: 2; color: "#FF1744" }
+  }
+
+  // ---- Fixed centre crosshair (capture point in centre mode) ----
   Item {
     id: crosshair
     anchors.centerIn: parent
     width: 34; height: 34
-    visible: root.isOpen
+    visible: root.isOpen && !root.penMode
     z: 6
 
     Rectangle { anchors.centerIn: parent; width: 2; height: 34; color: "#FF1744" }
@@ -131,18 +167,41 @@ Item {
       anchors.margins: 10
       spacing: 8
 
-      // Header: title + close
+      // Header: title + pen/centre toggle + close
       RowLayout {
         Layout.fillWidth: true
+        spacing: 8
+
         Label {
           text: qsTr( "ფიგურის ხაზვა" )
           font.pixelSize: 16; font.bold: true; color: "#212121"
           Layout.fillWidth: true
+          elide: Text.ElideRight
         }
+
+        // Pen ⇄ centre toggle
         Rectangle {
-          width: 30; height: 30; radius: 15
-          color: closeArea.pressed ? "#E0E0E0" : "#EEEEEE"
-          Label { anchors.centerIn: parent; text: "✕"; font.pixelSize: 14; color: "#424242" }
+          width: penToggleLabel.implicitWidth + 26; height: 38; radius: 19
+          color: root.penMode ? Theme.mainColor : "#ECEFF1"
+          border.color: root.penMode ? Theme.mainColor : "#B0BEC5"; border.width: 1
+          Label {
+            id: penToggleLabel
+            anchors.centerIn: parent
+            text: root.penMode ? qsTr( "✏️ კალამი" ) : qsTr( "🎯 ცენტრი" )
+            font.pixelSize: 13; font.bold: true
+            color: root.penMode ? "white" : "#37474F"
+          }
+          MouseArea {
+            anchors.fill: parent
+            onClicked: { root.penMode = !root.penMode; shapeModel.clearProvisional() }
+          }
+        }
+
+        // Close (clearly visible)
+        Rectangle {
+          width: 40; height: 40; radius: 20
+          color: closeArea.pressed ? "#B71C1C" : "#E53935"
+          Label { anchors.centerIn: parent; text: "✕"; font.pixelSize: 20; font.bold: true; color: "white" }
           MouseArea { id: closeArea; anchors.fill: parent; onClicked: root.isOpen = false }
         }
       }
@@ -212,20 +271,35 @@ Item {
         Layout.fillWidth: true
         spacing: 6
 
-        // Capture point (primary)
+        // Capture at centre crosshair (centre mode only)
         Rectangle {
+          visible: !root.penMode
           Layout.fillWidth: true
           height: 44; radius: 8
           color: captureArea.pressed ? Qt.darker( Theme.mainColor, 1.2 ) : Theme.mainColor
           Label {
             anchors.centerIn: parent
-            text: qsTr( "＋ წერტილი" )
-            font.pixelSize: 15; font.bold: true; color: "white"
+            text: qsTr( "＋ წერტილი (ცენტრი)" )
+            font.pixelSize: 14; font.bold: true; color: "white"
           }
           MouseArea {
             id: captureArea
             anchors.fill: parent
             onClicked: shapeModel.capturePoint()
+          }
+        }
+
+        // Pen-mode hint (tap the map instead)
+        Rectangle {
+          visible: root.penMode
+          Layout.fillWidth: true
+          height: 44; radius: 8
+          color: "#E3F2FD"
+          Label {
+            anchors.centerIn: parent
+            text: qsTr( "✏️ შეახე კალამი რუკას წერტილისთვის" )
+            font.pixelSize: 13; color: "#1565C0"
+            elide: Text.ElideRight
           }
         }
 
