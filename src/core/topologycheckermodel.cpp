@@ -745,23 +745,40 @@ void TopologyCheckerModel::zoomToError( int index )
   const double cx = ( err.bboxXMin + err.bboxXMax ) / 2.0;
   const double cy = ( err.bboxYMin + err.bboxYMax ) / 2.0;
 
-  // Zoom like the QGIS Topology Checker: centre the error and zoom in tightly so
-  // the spot is obvious. Half-extent scales with the error but has a floor so a
-  // point/tiny error is still framed with a few metres of context.
+  // Zoom like the QGIS Topology Checker: a TIGHT zoom centred on the error,
+  // framed to the screen aspect ratio so the error sits in the middle. Sizing is
+  // relative to the current view (CRS-unit agnostic): always zoom IN, with a
+  // floor so a tiny/point error still gets a strong, precise zoom-in.
+  QgsRectangle cur;
+  const QVariant ev = mMapSettings->property( "extent" );
+  if ( ev.canConvert<QgsRectangle>() )
+    cur = ev.value<QgsRectangle>();
+  const double curW = cur.width() > 0.0 ? cur.width() : 0.0;
+  const double curH = cur.height() > 0.0 ? cur.height() : 0.0;
+  const double aspect = curH > 0.0 ? curW / curH : 1.0;
+
   const double errSize = std::max( errBox.width(), errBox.height() );
-  double half;
-  if ( errSize > 0.0 )
+  double targetHalf = errSize * 0.75; // error fills ~2/3 of the view
+  if ( curW > 0.0 )
   {
-    half = std::max( errSize * 2.0, 5.0 );
+    const double minHalf = curW * 0.015; // floor → strong zoom-in for tiny errors
+    const double maxHalf = curW * 0.45;  // ceiling → always zoom in, keep context
+    targetHalf = std::max( minHalf, std::min( targetHalf, maxHalf ) );
   }
-  else
+  else if ( targetHalf <= 0.0 )
   {
-    const QVariant ev = mMapSettings->property( "extent" );
-    const double cur = ev.canConvert<QgsRectangle>() ? ev.value<QgsRectangle>().width() : 0.0;
-    half = cur > 0.0 ? cur * 0.03 : 10.0;
+    targetHalf = 10.0;
   }
 
-  const QgsRectangle view( cx - half, cy - half, cx + half, cy + half );
+  // Match the screen aspect so setExtent does not expand the view unexpectedly.
+  double halfW = targetHalf;
+  double halfH = targetHalf;
+  if ( aspect >= 1.0 )
+    halfW = targetHalf * aspect;
+  else
+    halfH = targetHalf / aspect;
+
+  const QgsRectangle view( cx - halfW, cy - halfH, cx + halfW, cy + halfH );
 
   // NOTE: setExtent() is the property WRITE accessor, NOT a Q_INVOKABLE/slot, so
   // QMetaObject::invokeMethod( "setExtent" ) silently does nothing. Setting the

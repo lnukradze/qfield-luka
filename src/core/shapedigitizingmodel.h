@@ -10,6 +10,8 @@
 #include <qgspointxy.h>
 
 class QgsVectorLayer;
+class QgsQuickMapSettings;
+class SnappingUtils;
 
 /**
  * Backs a QGIS-style "shape digitizing" toolbar for QField.
@@ -36,6 +38,8 @@ class ShapeDigitizingModel : public QObject
     Q_PROPERTY( int numSides READ numSides WRITE setNumSides NOTIFY numSidesChanged )
     Q_PROPERTY( QObject *mapSettings WRITE setMapSettings )
     Q_PROPERTY( QObject *targetLayer READ targetLayer WRITE setTargetLayer NOTIFY targetLayerChanged )
+    Q_PROPERTY( bool snapEnabled READ snapEnabled WRITE setSnapEnabled NOTIFY snapEnabledChanged )
+    Q_PROPERTY( bool provisionalSnapped READ provisionalSnapped NOTIFY pointsChanged )
 
   public:
     // Order matches modeNames() so a combo/button index maps to the enum value.
@@ -61,9 +65,13 @@ class ShapeDigitizingModel : public QObject
     int requiredPoints() const;
     bool canCommit() const { return mPoints.count() >= requiredPoints(); }
 
-    void setMapSettings( QObject *mapSettings ) { mMapSettings = mapSettings; }
+    void setMapSettings( QObject *mapSettings );
     QObject *targetLayer() const;
     void setTargetLayer( QObject *layer );
+
+    bool snapEnabled() const { return mSnapEnabled; }
+    void setSnapEnabled( bool enabled );
+    bool provisionalSnapped() const { return mProvisionalSnapped; }
 
     //! Human-readable shape names, in enum order (index == ShapeMode value).
     Q_INVOKABLE QStringList modeNames() const;
@@ -94,6 +102,7 @@ class ShapeDigitizingModel : public QObject
     void pointsChanged();
     void numSidesChanged();
     void targetLayerChanged();
+    void snapEnabledChanged();
     void committed( bool ok, const QString &message );
 
   private:
@@ -103,6 +112,8 @@ class ShapeDigitizingModel : public QObject
     QgsGeometry buildGeometryMapCrs( const QVector<QgsPointXY> &pts ) const;
     QPointF toScreen( const QgsPointXY &mapPoint, bool *ok ) const;
     QgsPointXY fromScreen( double x, double y, bool *ok ) const;
+    //! Screen point → map point, snapped to project geometry when snapping is on.
+    QgsPointXY snapScreen( double x, double y, bool *snapped );
 
     int mMode = RectangleExtent;
     int mNumSides = 5;
@@ -112,6 +123,9 @@ class ShapeDigitizingModel : public QObject
     QObject *mMapSettings = nullptr;
     QgsVectorLayer *mTargetLayer = nullptr;
     QgsCoordinateReferenceSystem mMapCrs;
+    SnappingUtils *mSnapper = nullptr;
+    bool mSnapEnabled = true;
+    bool mProvisionalSnapped = false;
 };
 
 #endif // SHAPEDIGITIZINGMODEL_H

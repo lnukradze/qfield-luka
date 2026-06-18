@@ -116,16 +116,19 @@ Item {
     onExited: shapeModel.clearProvisional()
   }
 
-  // Cursor that follows the pen/finger in pen mode
+  // Cursor that follows the pen/finger in pen mode.
+  // Turns purple when the point is snapping to existing geometry.
   Rectangle {
     visible: root.isOpen && root.penMode && penSurface.containsMouse
-    x: penSurface.mouseX - 12
-    y: penSurface.mouseY - 12
-    width: 24; height: 24; radius: 12
+    property color markColor: shapeModel.provisionalSnapped ? "#9b59b6" : "#FF1744"
+    x: penSurface.mouseX - width / 2
+    y: penSurface.mouseY - height / 2
+    width: shapeModel.provisionalSnapped ? 30 : 24
+    height: width; radius: width / 2
     color: "transparent"
-    border.color: "#FF1744"; border.width: 2
+    border.color: markColor; border.width: shapeModel.provisionalSnapped ? 3 : 2
     z: 7
-    Rectangle { anchors.centerIn: parent; width: 4; height: 4; radius: 2; color: "#FF1744" }
+    Rectangle { anchors.centerIn: parent; width: 5; height: 5; radius: 2.5; color: parent.markColor }
   }
 
   // ---- Fixed centre crosshair (capture point in centre mode) ----
@@ -231,6 +234,26 @@ Item {
         }
       }
 
+      // Snapping toggle (uses the project's snapping configuration)
+      RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+        Rectangle {
+          width: snapLabel.implicitWidth + 28; height: 32; radius: 16
+          color: shapeModel.snapEnabled ? "#9b59b6" : "#ECEFF1"
+          border.color: shapeModel.snapEnabled ? "#9b59b6" : "#B0BEC5"; border.width: 1
+          Label {
+            id: snapLabel
+            anchors.centerIn: parent
+            text: shapeModel.snapEnabled ? qsTr( "🧲 მიკვრა: ჩართ." ) : qsTr( "🧲 მიკვრა: გამორთ." )
+            font.pixelSize: 12; font.bold: true
+            color: shapeModel.snapEnabled ? "white" : "#37474F"
+          }
+          MouseArea { anchors.fill: parent; onClicked: shapeModel.snapEnabled = !shapeModel.snapEnabled }
+        }
+        Item { Layout.fillWidth: true }
+      }
+
       // Sides control (regular polygon only)
       RowLayout {
         Layout.fillWidth: true
@@ -285,7 +308,8 @@ Item {
           MouseArea {
             id: captureArea
             anchors.fill: parent
-            onClicked: shapeModel.capturePoint()
+            // Capture at the crosshair (screen centre) so snapping applies here too.
+            onClicked: shapeModel.capturePointAtScreen( root.width / 2, root.height / 2 )
           }
         }
 

@@ -1,5 +1,9 @@
 #include "shapedigitizingmodel.h"
 
+#include "qgsquickmapsettings.h"
+#include "snappingresult.h"
+#include "snappingutils.h"
+
 #include <cmath>
 #include <memory>
 
@@ -21,6 +25,25 @@
 ShapeDigitizingModel::ShapeDigitizingModel( QObject *parent )
   : QObject( parent )
 {
+  mSnapper = new SnappingUtils( this );
+}
+
+void ShapeDigitizingModel::setMapSettings( QObject *mapSettings )
+{
+  mMapSettings = mapSettings;
+  if ( mSnapper )
+  {
+    if ( QgsQuickMapSettings *qms = qobject_cast<QgsQuickMapSettings *>( mapSettings ) )
+      mSnapper->setMapSettings( qms );
+  }
+}
+
+void ShapeDigitizingModel::setSnapEnabled( bool enabled )
+{
+  if ( enabled == mSnapEnabled )
+    return;
+  mSnapEnabled = enabled;
+  emit snapEnabledChanged();
 }
 
 int ShapeDigitizingModel::requiredPoints() const
@@ -138,6 +161,31 @@ QgsPointXY ShapeDigitizingModel::provisionalPoint() const
   return mHasProvisional ? mProvisional : mapCenter();
 }
 
+QgsPointXY ShapeDigitizingModel::snapScreen( double x, double y, bool *snapped )
+{
+  if ( snapped )
+    *snapped = false;
+
+  // Use the project's snapping configuration (vertex/edge/tolerance/layers) so
+  // the shape tool snaps exactly like the rest of QField digitizing.
+  if ( mSnapEnabled && mSnapper && mSnapper->mapSettings() )
+  {
+    mSnapper->setConfig( QgsProject::instance()->snappingConfig() );
+    mSnapper->setInputCoordinate( QPointF( x, y ) );
+    const SnappingResult r = mSnapper->snappingResult();
+    if ( r.isValid() )
+    {
+      if ( snapped )
+        *snapped = true;
+      const QgsPoint p = r.point(); // already in map (destination) CRS
+      return QgsPointXY( p.x(), p.y() );
+    }
+  }
+
+  bool ok = false;
+  return fromScreen( x, y, &ok ); // fall back to the exact tapped location
+}
+
 void ShapeDigitizingModel::capturePoint()
 {
   if ( mPoints.count() >= requiredPoints() )
@@ -153,23 +201,21 @@ void ShapeDigitizingModel::capturePointAtScreen( double x, double y )
   if ( mPoints.count() >= requiredPoints() )
     return;
   refreshMapCrs();
-  bool ok = false;
-  const QgsPointXY p = fromScreen( x, y, &ok );
-  if ( !ok )
-    return;
+  bool snapped = false;
+  const QgsPointXY p = snapScreen( x, y, &snapped );
   mPoints.append( p );
   mHasProvisional = false;
+  mProvisionalSnapped = false;
   emit pointsChanged();
 }
 
 void ShapeDigitizingModel::setProvisionalScreenPoint( double x, double y )
 {
-  bool ok = false;
-  const QgsPointXY p = fromScreen( x, y, &ok );
-  if ( !ok )
-    return;
+  bool snapped = false;
+  const QgsPointXY p = snapScreen( x, y, &snapped );
   mProvisional = p;
   mHasProvisional = true;
+  mProvisionalSnapped = snapped;
   emit pointsChanged(); // refresh the live preview
 }
 
@@ -178,6 +224,7 @@ void ShapeDigitizingModel::clearProvisional()
   if ( !mHasProvisional )
     return;
   mHasProvisional = false;
+  mProvisionalSnapped = false;
   emit pointsChanged();
 }
 
@@ -195,6 +242,7 @@ void ShapeDigitizingModel::clear()
     return;
   mPoints.clear();
   mHasProvisional = false;
+  mProvisionalSnapped = false;
   emit pointsChanged();
 }
 
